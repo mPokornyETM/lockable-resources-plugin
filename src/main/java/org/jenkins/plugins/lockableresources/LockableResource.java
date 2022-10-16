@@ -25,6 +25,7 @@ import hudson.model.Queue.Item;
 import hudson.model.Queue.Task;
 import hudson.model.Run;
 import hudson.model.User;
+import hudson.security.Permission;
 import hudson.tasks.Mailer.UserProperty;
 import java.io.Serializable;
 import java.text.DateFormat;
@@ -38,14 +39,17 @@ import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
 import org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.SecureGroovyScript;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
+// import org.kohsuke.stapler.bind.JavaScriptMethod;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.export.ExportedBean;
+import org.jenkins.plugins.lockableresources.Permissions;
 
 @ExportedBean(defaultVisibility = 999)
 public class LockableResource extends AbstractDescribableImpl<LockableResource>
@@ -61,6 +65,7 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
   private String labels = "";
   private String reservedBy = null;
   private Date reservedTimestamp = null;
+  private Date freeSince = null;
   private String note = "";
 
   /**
@@ -163,6 +168,55 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     this.note = note;
   }
 
+  // used by jelly
+  public String getLockState() {
+    if (this.isLocked()) {
+      return "LOCKED";
+    } else if (this.isReserved()) {
+      return "RESERVED";
+    } else if (this.isQueued()) {
+      return "QUEUED";
+    } else {
+      return "FREE";
+    }
+  }
+
+  // used by jelly
+  public String getLocalizedLockState() {
+    if (this.isLocked()) {
+      return Messages.LockableResources_State_Locked();
+    } else if (this.isReserved()) {
+      return Messages.LockableResources_State_Reserved();
+    } else if (this.isQueued()) {
+      return Messages.LockableResources_State_Queued();
+    } else {
+      return Messages.LockableResources_State_Free();
+    }
+  }
+
+  // @JavaScriptMethod 
+  public JSONObject getJavaScriptObject() {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("resourceName", this.name);
+    jsonObject.put("isEphemeral", this.isEphemeral());
+    jsonObject.put("isLocked", this.isLocked());
+    jsonObject.put("isReserved", this.isReserved());
+    jsonObject.put("isStolen", this.isStolen());
+    jsonObject.put("isReservedByCurrentUser", this.isReserved(this.getUserName()));
+    // jsonObject.put("reservedBy", this.reservedBy ? this.reservedBy : "");
+    jsonObject.put("isQueued", this.isQueued());
+    return jsonObject;
+  }
+
+  public static String getUserName() {
+    User current = User.current();
+    if (current != null) {
+      return current.getFullName();
+    } else {
+      return null;
+    }
+  }
+
   @DataBoundSetter
   public void setEphemeral(boolean ephemeral) {
     this.ephemeral = ephemeral;
@@ -181,8 +235,15 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     return makeLabelsList().contains(candidate);
   }
 
-  private List<String> makeLabelsList() {
-    return Arrays.asList(labels.split("\\s+"));
+  // used by jelly
+  public List<String> makeLabelsList() {
+    List<String> labelsAsList = new ArrayList<>();
+    if (labels.trim().isEmpty()) {
+      return labelsAsList;
+    }
+    labelsAsList = Arrays.asList(labels.split("\\s+"));
+    labelsAsList.sort(null);
+    return labelsAsList;
   }
 
   /**
@@ -232,6 +293,16 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
   @DataBoundSetter
   public void setReservedTimestamp(final Date reservedTimestamp) {
     this.reservedTimestamp = reservedTimestamp == null ? null : new Date(reservedTimestamp.getTime());
+
+    if (reservedTimestamp == null) {
+      this.freeSince = new Date();
+    } else {
+      this.freeSince = null;
+    }
+  }
+
+  public Date getFreeSinceTimestamp() {
+    return freeSince;
   }
 
   @Exported
@@ -240,9 +311,22 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
   }
 
   @Exported
+  public User getReservedUser() {
+    if (this.reservedBy == null || this.reservedBy.isEmpty()) {
+      return null;
+    }
+    return Jenkins.get().getUser(this.reservedBy);
+  }
+
+  @Exported
   public boolean isReserved() {
     return reservedBy != null;
   }
+
+  private boolean isReserved(String userId) {
+    return reservedBy != null && reservedBy == userId;
+  }
+  
 
   @Exported
   public String getReservedByEmail() {
@@ -300,6 +384,63 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     return null;
   }
 
+  // used by jelly
+  public String getBuildUrl() {
+    if (getBuild() != null) {
+      return getBuild().getUrl();
+    }
+    else {
+      return null;
+    }
+  }
+
+  /**
+     * First check point in creating a new agent.
+     */
+     /*
+    @RequirePOST
+    public synchronized void doCreateItem(StaplerRequest req, StaplerResponse rsp,
+                                           @QueryParameter String name, @QueryParameter String mode,
+                                           @QueryParameter String from) throws IOException, ServletException {
+        final Jenkins app = Jenkins.get();
+        app.checkPermission(Computer.CREATE);
+
+        if (mode != null && mode.equals("copy")) {
+            name = checkName(name);
+
+            Node src = app.getNode(from);
+            if (src == null) {
+                if (Util.fixEmpty(from) == null) {
+                    throw new Failure(Messages.ComputerSet_SpecifySlaveToCopy());
+                } else {
+                    throw new Failure(Messages.ComputerSet_NoSuchSlave(from));
+                }
+            }
+
+            // copy through XStream
+            String xml = Jenkins.XSTREAM.toXML(src);
+            Node result = (Node) Jenkins.XSTREAM.fromXML(xml);
+            result.setNodeName(name);
+            result.holdOffLaunchUntilSave = true;
+
+            app.addNode(result);
+
+            // send the browser to the config page
+            rsp.sendRedirect2(result.getNodeName() + "/configure");
+        } else {
+            // proceed to step 2
+            if (mode == null) {
+                throw new Failure("No mode given");
+            }
+
+            NodeDescriptor d = NodeDescriptor.all().findByName(mode);
+            if (d == null) {
+                throw new Failure("No node type ‘" + mode + "’ is known");
+            }
+            d.handleNewNodePage(this, name, req, rsp);
+        }
+    } */
+
   @WithBridgeMethods(value = AbstractBuild.class, adapterMethod = "getAbstractBuild")
   public Run<?, ?> getBuild() {
     if (build == null && buildExternalizableId != null) {
@@ -346,7 +487,7 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
 
   public long getQueueItemId() {
     this.validateQueuingTimeout();
-    return queueItemId;
+    return this.queueItemId;
   }
 
   public String getQueueItemProject() {

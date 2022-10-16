@@ -18,6 +18,7 @@ import hudson.security.PermissionGroup;
 import hudson.security.PermissionScope;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import javax.servlet.ServletException;
@@ -79,12 +80,7 @@ public class LockableResourcesRootAction implements RootAction {
   }
 
   public String getUserName() {
-    User current = User.current();
-    if (current != null) {
-      return current.getFullName();
-    } else {
-      return null;
-    }
+    return LockableResource.getUserName();
   }
 
   @Override
@@ -110,7 +106,7 @@ public class LockableResourcesRootAction implements RootAction {
     return LockableResourcesManager.get().getFreeResourceAmount(label);
   }
 
-  public Set<String> getAllLabels() {
+  public Set <String> getAllLabels() {
     return LockableResourcesManager.get().getAllLabels();
   }
 
@@ -118,21 +114,49 @@ public class LockableResourcesRootAction implements RootAction {
     return LockableResourcesManager.get().getAllLabels().size();
   }
 
-  @RequirePOST
-  public void doUnlock(StaplerRequest req, StaplerResponse rsp)
-    throws IOException, ServletException
-  {
-    Jenkins.get().checkPermission(UNLOCK);
+  private List<LockableResource> getLockableResourcesFromRequest(Permission permission, StaplerRequest req, StaplerResponse rsp)
+  throws IOException, ServletException {
+    Jenkins.get().checkPermission(permission);
+
+    List<String> tryToFind = new ArrayList <> ();
 
     String name = req.getParameter("resource");
-    LockableResource r = LockableResourcesManager.get().fromName(name);
-    if (r == null) {
-      rsp.sendError(404, "Resource not found " + name);
+    if (name != null) {
+      tryToFind.add(name);
+    } else {
+      name = req.getParameter("resources");
+      if (name != null) {
+        tryToFind.addAll(Arrays.asList(name.split("\n")));
+      }
+    }
+
+    if (tryToFind.size() <= 0) {
+      rsp.sendError(404, "Invalid request, parameter 'resources' is missing");
+      return null;
+    }
+
+    List<LockableResource> resources = new ArrayList <> ();
+
+    for (String rName : tryToFind) {
+      LockableResource r = LockableResourcesManager.get().fromName(rName);
+      if (r == null) {
+        rsp.sendError(404, "Resource not found " + rName);
+        return null;
+      }
+      resources.add(r);
+    }
+    return resources;
+  }
+
+  @RequirePOST
+  public void doUnlock(StaplerRequest req, StaplerResponse rsp)
+  throws IOException, ServletException {
+    List<LockableResource> resources = getLockableResourcesFromRequest(UNLOCK, req, rsp);
+
+    if (resources == null) {
       return;
     }
 
-    List<LockableResource> resources = new ArrayList<>();
-    resources.add(r);
     LockableResourcesManager.get().unlock(resources, null);
 
     rsp.forwardToPreviousPage(req);
@@ -140,158 +164,133 @@ public class LockableResourcesRootAction implements RootAction {
 
   @RequirePOST
   public void doReserve(StaplerRequest req, StaplerResponse rsp)
-    throws IOException, ServletException
-  {
-    Jenkins.get().checkPermission(RESERVE);
+  throws IOException, ServletException {
+    List<LockableResource> resources = getLockableResourcesFromRequest(RESERVE, req, rsp);
 
-    String name = req.getParameter("resource");
-    LockableResource r = LockableResourcesManager.get().fromName(name);
-    if (r == null) {
-      rsp.sendError(404, "Resource not found " + name);
+    if (resources == null) {
       return;
     }
 
-    List<LockableResource> resources = new ArrayList<>();
-    resources.add(r);
-    String userName = getUserName();
+    String userName = this.getUserName();
     if (userName != null) {
       if (!LockableResourcesManager.get().reserve(resources, userName)) {
-        rsp.sendError(423, "Resource '" + name + "' already reserved or locked!");
+        rsp.sendError(423, "Resources already reserved or locked!");
         return;
       }
     }
+
     rsp.forwardToPreviousPage(req);
   }
 
   @RequirePOST
   public void doSteal(StaplerRequest req, StaplerResponse rsp)
-    throws IOException, ServletException
-  {
-    Jenkins.get().checkPermission(STEAL);
+  throws IOException, ServletException {
+    List<LockableResource> resources = getLockableResourcesFromRequest(STEAL, req, rsp);
 
-    String name = req.getParameter("resource");
-    LockableResource r = LockableResourcesManager.get().fromName(name);
-    if (r == null) {
-      rsp.sendError(404, "Resource not found " + name);
+    if (resources == null) {
       return;
     }
 
-    List<LockableResource> resources = new ArrayList<>();
-    resources.add(r);
-    String userName = getUserName();
+    String userName = this.getUserName();
     if (userName != null) {
       LockableResourcesManager.get().steal(resources, userName);
     }
 
-    rsp.forwardToPreviousPage(req);
+    rsp.forwardToPreviousPage(req);;
   }
 
   @RequirePOST
   public void doReassign(StaplerRequest req, StaplerResponse rsp)
-    throws IOException, ServletException
-  {
-    Jenkins.get().checkPermission(STEAL);
+  throws IOException, ServletException {
+    List<LockableResource> resources = getLockableResourcesFromRequest(STEAL, req, rsp);
 
-    String name = req.getParameter("resource");
-    LockableResource r = LockableResourcesManager.get().fromName(name);
-    if (r == null) {
-      rsp.sendError(404, "Resource not found " + name);
+    if (resources == null) {
       return;
     }
 
-    String userName = getUserName();
-    if (userName == null
-        || (!Jenkins.get().hasPermission(Jenkins.ADMINISTER)
-            && !Jenkins.get().hasPermission(STEAL))
+    String userName = this.getUserName();
+    if (userName == null ||
+      (!Jenkins.get().hasPermission(Jenkins.ADMINISTER) &&
+        !Jenkins.get().hasPermission(STEAL))
     ) {
       throw new AccessDeniedException2(Jenkins.getAuthentication(), STEAL);
     }
 
-    if (userName.equals(r.getReservedBy())) {
-      // Can not achieve much by re-assigning the
-      // resource I already hold to myself again,
-      // that would just burn the compute resources.
-      // ...unless something catches the event? (TODO?)
-      return;
+    for (LockableResource r : resources) {
+      if (userName.equals(r.getReservedBy())) {
+        // Can not achieve much by re-assigning the
+        // resource I already hold to myself again,
+        // that would just burn the compute resources.
+        // ...unless something catches the event? (TODO?)
+        return;
+      }
     }
 
-    List<LockableResource> resources = new ArrayList<>();
-    resources.add(r);
     LockableResourcesManager.get().reassign(resources, userName);
 
-    rsp.forwardToPreviousPage(req);
+    rsp.forwardToPreviousPage(req);;
   }
 
   @RequirePOST
   public void doUnreserve(StaplerRequest req, StaplerResponse rsp)
-    throws IOException, ServletException
-  {
-    Jenkins.get().checkPermission(RESERVE);
+  throws IOException, ServletException {
+    List<LockableResource> resources = getLockableResourcesFromRequest(RESERVE, req, rsp);
 
-    String name = req.getParameter("resource");
-    LockableResource r = LockableResourcesManager.get().fromName(name);
-    if (r == null) {
-      rsp.sendError(404, "Resource not found " + name);
+    if (resources == null) {
       return;
     }
 
-    String userName = getUserName();
-    if ((userName == null || !userName.equals(r.getReservedBy()))
-        && !Jenkins.get().hasPermission(Jenkins.ADMINISTER)
-    ) {
-      throw new AccessDeniedException2(Jenkins.getAuthentication(), RESERVE);
+    String userName = this.getUserName();
+
+    for (LockableResource r : resources) {
+      if ((userName == null || !userName.equals(r.getReservedBy())) &&
+        !Jenkins.get().hasPermission(Jenkins.ADMINISTER)
+      ) {
+        throw new AccessDeniedException2(Jenkins.getAuthentication(), RESERVE);
+      }
     }
 
-    List<LockableResource> resources = new ArrayList<>();
-    resources.add(r);
     LockableResourcesManager.get().unreserve(resources);
 
-    rsp.forwardToPreviousPage(req);
+    rsp.forwardToPreviousPage(req);;
   }
 
   @RequirePOST
   public void doReset(StaplerRequest req, StaplerResponse rsp)
-    throws IOException, ServletException
-  {
-    Jenkins.get().checkPermission(UNLOCK);
+  throws IOException, ServletException {
     // Should this also be permitted by "STEAL"?..
+    List<LockableResource> resources = getLockableResourcesFromRequest(UNLOCK, req, rsp);
 
-    String name = req.getParameter("resource");
-    LockableResource r = LockableResourcesManager.get().fromName(name);
-    if (r == null) {
-      rsp.sendError(404, "Resource not found " + name);
+    if (resources == null) {
       return;
     }
 
-    List<LockableResource> resources = new ArrayList<>();
-    resources.add(r);
     LockableResourcesManager.get().reset(resources);
 
-    rsp.forwardToPreviousPage(req);
+    rsp.forwardToPreviousPage(req);;
   }
 
   @RequirePOST
   public void doSaveNote(final StaplerRequest req, final StaplerResponse rsp)
-      throws IOException, ServletException {
-    Jenkins.get().checkPermission(RESERVE);
+  throws IOException, ServletException {
+    List<LockableResource> resources = getLockableResourcesFromRequest(RESERVE, req, rsp);
 
-    String resourceName = req.getParameter("resource");
-    if (resourceName == null) {
-      resourceName = req.getParameter("resourceName");
+    if (resources == null) {
+      return;
     }
 
-    final LockableResource resource = getResource(resourceName);
-    if (resource == null) {
-      rsp.sendError(404, "Resource not found: '" + resourceName + "'!");
-    } else {
-      String resourceNote = req.getParameter("note");
-      if (resourceNote == null) {
-        resourceNote = req.getParameter("resourceNote");
-      }
+    String resourceNote = req.getParameter("note");
+    if (resourceNote == null) {
+      resourceNote = req.getParameter("resourceNote");
+    }
+
+    for (LockableResource resource : resources) {
       resource.setNote(resourceNote);
-      LockableResourcesManager.get().save();
-
-      rsp.forwardToPreviousPage(req);
     }
+
+    LockableResourcesManager.get().save();
+
+    rsp.forwardToPreviousPage(req);;
+
   }
 }

@@ -1,0 +1,40 @@
+
+.flex-wrapper {
+  display: flex;
+  min-height: 4rm;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.btn-table-small {
+  /* padding : 0 */
+  min-height: auto;
+}
+
+
+.jenkins-copy-button {
+  /* padding : 0 */
+  min-height: auto;
+}
+
+.jenkins-copy-button__icon {
+  position: revert;
+}
+/* 
+.jenkins-copy-button__icon:after {
+  bottom: 40%;
+  right: 20%;
+} */
+
+.lock-state-FREE {
+  color : var(--green);
+}
+.lock-state-LOCKED {
+  color : var(--light-orange);
+}
+.lock-state-RESERVED {
+  color: var(--orange);
+}
+.lock-state-QUEUED {
+  color: var(--dark-orange);
+}
