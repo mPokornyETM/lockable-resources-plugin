@@ -16,6 +16,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.jenkins.plugins.lockableresources.queue.LockableResourcesStruct;
+import org.jenkins.plugins.lockableresources.util.ActionLogs;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepExecutionImpl;
 import org.jenkinsci.plugins.workflow.steps.BodyExecutionCallback;
@@ -41,9 +42,15 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
   public boolean start() throws Exception {
     step.validate();
 
+    final String buildId = getContext().get(Run.class).getExternalizableId();
+
     getContext().get(FlowNode.class).addAction(new PauseAction("Lock"));
     PrintStream logger = getContext().get(TaskListener.class).getLogger();
-    logger.println("Trying to acquire lock on [" + step + "]");
+    ActionLogs.add(
+      logger,
+      Level.INFO,
+      "The build [" + buildId + "] trying to acquire lock on resource [" + step + "]",
+      step.resource);
 
     List<LockableResourcesStruct> resourceHolderList = new ArrayList<>();
 
@@ -51,7 +58,11 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
       List<String> resources = new ArrayList<>();
       if (resource.resource != null) {
         if (LockableResourcesManager.get().createResource(resource.resource)) {
-          logger.println("Resource [" + resource + "] did not exist. Created.");
+          // ActionLogs.add(
+          //   logger,
+          //   Level.INFO,
+          //   "Resource [" + resource + "] required for build [" + buildId + "] did not exist. Created.",
+          //   resource.resource);
         }
         resources.add(resource.resource);
       }
@@ -75,24 +86,24 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
         step.inversePrecedence)) {
       // if the resource is known, we could output the active/blocking job/build
       LockableResource resource = LockableResourcesManager.get().fromName(step.resource);
-      boolean buildNameKnown = resource != null && resource.getBuildName() != null;
-      if (step.skipIfLocked) {
-        if (buildNameKnown) {
-          logger.println(
-            "[" + step + "] is locked by " + resource.getBuildName() + ", skipping execution...");
+      if (resource != null) {
+        if (step.skipIfLocked) {
+          ActionLogs.add(
+            logger,
+            Level.WARNING,
+            "Skipping execution in the build [" + run.getExternalizableId() + "].\n" + 
+            resource.getLockCauseFormattedForLogs());
+          getContext().onSuccess(null);
+          return true;
         } else {
-          logger.println("[" + step + "] is locked, skipping execution...");
+          ActionLogs.add(
+            logger,
+            Level.WARNING,
+            "The build [" + run.getExternalizableId() + "] must wait now.\n" +
+            resource.getLockCauseFormattedForLogs());
+          LockableResourcesManager.get()
+            .queueContext(getContext(), resourceHolderList, step.toString(), step.variable);
         }
-        getContext().onSuccess(null);
-        return true;
-      } else {
-        if (buildNameKnown) {
-          logger.println("[" + step + "] is locked by " + resource.getBuildName() + ", waiting...");
-        } else {
-          logger.println("[" + step + "] is locked, waiting...");
-        }
-        LockableResourcesManager.get()
-          .queueContext(getContext(), resourceHolderList, step.toString(), step.variable);
       }
     } // proceed is called inside lock if execution is possible
     return false;
@@ -107,19 +118,25 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
     boolean inversePrecedence) {
     Run<?, ?> r;
     FlowNode node;
+    String buildId;
+
     try {
+      buildId = context.get(Run.class).getExternalizableId();
       r = context.get(Run.class);
       node = context.get(FlowNode.class);
-      context
-        .get(TaskListener.class)
-        .getLogger()
-        .println("Lock acquired on [" + resourceDescription + "]");
+      for (int index = 0; index < resourceNames.size(); ++index) {
+        ActionLogs.add(
+          context.get(TaskListener.class).getLogger(),
+          Level.INFO,
+          "Lock acquired on resource [" + resourceDescription + "] by build [" + buildId + "]",
+          resourceNames.get(index));
+      }     
     } catch (Exception e) {
       context.onFailure(e);
       return;
     }
 
-    LOGGER.finest("Lock acquired on [" + resourceDescription + "] by " + r.getExternalizableId());
+    LOGGER.finest("Lock acquired on resource [" + resourceDescription + "] by build [" + buildId + "]");
     try {
       PauseAction.endCurrentPause(node);
       BodyInvoker bodyInvoker =
@@ -175,11 +192,16 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
     protected void finished(StepContext context) throws Exception {
       LockableResourcesManager.get()
         .unlockNames(this.resourceNames, context.get(Run.class), this.inversePrecedence);
-      context
-        .get(TaskListener.class)
-        .getLogger()
-        .println("Lock released on resource [" + resourceDescription + "]");
-      LOGGER.finest("Lock released on [" + resourceDescription + "]");
+      
+      final String buildId = context.get(Run.class).getExternalizableId();
+      for (int index = 0; index < resourceNames.size(); ++index) {
+        ActionLogs.add(
+          context.get(TaskListener.class).getLogger(),
+          Level.INFO,
+          "Lock released on resource [" + resourceDescription + "] used by build [" + buildId + "]",
+          resourceNames.get(index));
+      }
+      LOGGER.finest("Lock released on resource [" + resourceDescription + "] used by build [" + buildId + "]");
     }
   }
 

@@ -263,6 +263,10 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     return reservedBy;
   }
 
+  public boolean isReservedBy(final String reason) {
+    return reservedBy != null && reservedBy.equals(reason);
+  }
+
   @Exported
   public boolean isReserved() {
     return reservedBy != null;
@@ -343,6 +347,31 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     return null;
   }
 
+  @Restricted(NoExternalUse.class)
+  public boolean isReservedByUser() {
+    return (Jenkins.get().getUser(this.getReservedBy()) != null);
+  }
+
+  @Restricted(NoExternalUse.class)
+  public String getLockCauseFormattedForLogs() {
+    final DateFormat format = SimpleDateFormat.getDateTimeInstance(MEDIUM, SHORT);
+    final String timestamp = (reservedTimestamp == null ? "<unknown>" : format.format(this.reservedTimestamp));
+
+    if (this.isReservedByUser()) {
+      return String.format("Resource [%s] is reserved by user [%s] at [%s]", this.name, this.reservedBy, timestamp);
+    }
+    else if (this.isReserved()) {
+      return String.format("Resource [%s] is reserved by [%s] at [%s]", this.name, this.reservedBy, timestamp);
+    }
+    else if (this.isLocked()) {
+      return String.format("Resource [%s] is locked by build [%s] at [%s]", this.name, this.buildExternalizableId, timestamp);
+    }
+    else if (this.isQueued()) {
+      return String.format("Resource [%s] is queued by [%s] at [%s]", this.name, this.queueItemProject, timestamp);
+    }
+    return "";
+  }
+
   @WithBridgeMethods(value = AbstractBuild.class, adapterMethod = "getAbstractBuild")
   public Run<?, ?> getBuild() {
     if (build == null && buildExternalizableId != null) {
@@ -366,6 +395,10 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
       this.buildExternalizableId = null;
       setReservedTimestamp(null);
     }
+  }
+
+  public String getBuildExternalizableId(){
+    return this.buildExternalizableId;
   }
 
   public Task getTask() {

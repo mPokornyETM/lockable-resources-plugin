@@ -11,13 +11,14 @@
 <j:jelly
   xmlns:j="jelly:core"
   xmlns:l="/lib/layout"
-  xmlns:f="/lib/form"
-  xmlns:i="jelly:fmt"
   xmlns:st="jelly:stapler"
 >
-  <l:layout title="${it.displayName}" type="one-column">
+  <l:layout title="${it.displayName}" type="one-column" norefresh="true" nogrid="true">
+    <l:app-bar title="${%header.resources}"></l:app-bar>
     <l:main-panel>
-      <h1>${%header.resources}</h1>
+
+     <div class="fluid-container">
+
       <j:choose>
         <j:when test="${it.resources.size() == 0}">
           <p>
@@ -28,14 +29,41 @@
         </p>
       </j:when>
       <j:otherwise>
-        <div class="fluid-container">
-          <st:include page="tableResources/table"/>
-          <st:include page="tableLabels/table"/>
-        </div>
 
+        <!-- Nav tabs -->
+          <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="resources-tab" data-bs-toggle="tab" data-bs-target="#resources"
+                type="button" role="tab" aria-controls="resources" aria-selected="true">${%tabs.resources}</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="labels-tab" data-bs-toggle="tab" data-bs-target="#labels" type="button"
+                role="tab" aria-controls="labels" aria-selected="false">${%tabs.labels}</button>
+            </li>
+            <!-- todo show only for admins -->
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button"
+                role="tab" aria-controls="logs" aria-selected="false">${%tabs.logs}</button>
+            </li>
+          </ul>
+          <!-- Tab panes -->
+          <div class="tab-content jenkins-!-margin-top-1">
+            <div class="tab-pane active" id="resources" role="tabpanel" aria-labelledby="resources-tab">
+             <st:include page="tableResources/table"/>
+            </div>
+
+            <div class="tab-pane" id="labels" role="tabpanel" aria-labelledby="labels-tab">
+              <st:include page="tableLabels/table"/>
+            </div>
+
+            <div class="tab-pane" id="logs" role="tabpanel" aria-labelledby="logs-tab">
+              <st:include page="tableLogs/table"/>
+            </div>
+          </div>
         <script type="text/javascript" src="${resURL}/plugin/data-tables-api/js/table.js"/>
         </j:otherwise>
       </j:choose>
+      </div>
     </l:main-panel>
   </l:layout>
 </j:jelly>

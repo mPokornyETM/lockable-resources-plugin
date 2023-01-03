@@ -21,7 +21,6 @@ import hudson.model.TaskListener;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -40,6 +39,7 @@ import org.apache.commons.lang.StringUtils;
 import org.jenkins.plugins.lockableresources.queue.LockableResourcesCandidatesStruct;
 import org.jenkins.plugins.lockableresources.queue.LockableResourcesStruct;
 import org.jenkins.plugins.lockableresources.queue.QueuedContextStruct;
+import org.jenkins.plugins.lockableresources.util.ActionLogs;
 import org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.SecureGroovyScript;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -150,6 +150,10 @@ public class LockableResourcesManager extends GlobalConfiguration {
       labels.addAll(r.getLabelsAsList());
     }
     return labels;
+  }
+
+  public List<ActionLogs.Entry> getAllLogs() {
+    return ActionLogs.getEntries();
   }
 
   public int getFreeResourceAmount(String label) {
@@ -423,9 +427,17 @@ public class LockableResourcesManager extends GlobalConfiguration {
     boolean needToWait = false;
 
     for (LockableResource r : resources) {
-      if (r.isReserved() || r.isLocked()) {
+      // @todo shall be here r.isQueued() ?
+      if (r.isReserved() || r.isLocked() ) {
         needToWait = true;
-        break;
+        ActionLogs.add(
+          Level.WARNING,
+          "Lock in in the build [" + build.getExternalizableId() + "]  must wait now.\n" + r.getLockCauseFormattedForLogs());
+        // break;
+      } else {
+        ActionLogs.add(
+          Level.INFO,
+          "The resource [" + r.getName() + "] will be locked by build [" + build.getExternalizableId() + "]");
       }
     }
     if (!needToWait) {
@@ -508,6 +520,12 @@ public class LockableResourcesManager extends GlobalConfiguration {
     // process as many contexts as possible
     List<String> remainingResourceNamesToUnLock = new ArrayList<>(resourceNamesToUnLock);
 
+    if (build != null) {
+      ActionLogs.add(
+        Level.INFO,
+        "Unlock resources [" + remainingResourceNamesToUnLock + "] used by build [" + build.getExternalizableId() + "]");
+    }
+
     QueuedContextStruct nextContext = null;
     while (!remainingResourceNamesToUnLock.isEmpty()) {
       // check if there are resources which can be unlocked (and shall not be unlocked)
@@ -534,12 +552,21 @@ public class LockableResourcesManager extends GlobalConfiguration {
       for (LockableResource requiredResource : requiredResourceForNextContext) {
         if (requiredResource.isStolen()) {
           needToWait = true;
-          break;
+          ActionLogs.add(
+            Level.WARNING,
+            "The resource [" + requiredResource + "] is stollen, unlock must wait now.\n" + requiredResource.getLockCauseFormattedForLogs());
+            continue;
+          // break;
         }
         if (!remainingResourceNamesToUnLock.contains(requiredResource.getName())) {
+          // @todo shall be here requiredResource.isQueued() check too?
           if (requiredResource.isReserved() || requiredResource.isLocked()) {
             needToWait = true;
-            break;
+            ActionLogs.add(
+              Level.INFO,
+              "Unlock must wait now.\n" + requiredResource.getLockCauseFormattedForLogs());
+              continue;
+            // break;
           }
         }
       }
@@ -675,6 +702,9 @@ public class LockableResourcesManager extends GlobalConfiguration {
     if (name != null) {
       LockableResource existent = fromName(name);
       if (existent == null) {
+        ActionLogs.add(
+          Level.INFO,
+          "The resource [" + name + "] will be created");
         LockableResource resource = new LockableResource(name);
         resource.setEphemeral(true);
         getResources().add(resource);
@@ -689,6 +719,9 @@ public class LockableResourcesManager extends GlobalConfiguration {
     if (name != null && label != null) {
       LockableResource existent = fromName(name);
       if (existent == null) {
+        ActionLogs.add(
+          Level.INFO,
+          "The resource [" + name + "] will be created with labels [" + label + "]");
         LockableResource resource = new LockableResource(name);
         resource.setLabels(label);
         getResources().add(resource);
@@ -705,18 +738,34 @@ public class LockableResourcesManager extends GlobalConfiguration {
    */
   public synchronized boolean reserve(
     List<LockableResource> resources,
-    String userName
+    final String userName
   ) {
+    boolean somethingChanged = false;
     for (LockableResource r : resources) {
-      if (r.isReserved() || r.isLocked() || r.isQueued()) {
-        return false;
+      if (r.isReservedBy(userName)) {
+        ActionLogs.add(
+          Level.WARNING,
+          "The user [" + userName + "] has currently reserved the resource [" + r.getName() + "].");
+        continue;
       }
-    }
-    for (LockableResource r : resources) {
+      if (r.isReserved() || r.isLocked() || r.isQueued()) {
+        ActionLogs.add(
+          Level.WARNING,
+          "Reservation for user [" + userName + "]  must wait now.\n" + r.getLockCauseFormattedForLogs());
+        continue;
+      }
+      somethingChanged = true;
       r.reserve(userName);
+      ActionLogs.add(
+        Level.INFO,
+        r.getLockCauseFormattedForLogs());
     }
-    save();
-    return true;
+
+    if (somethingChanged) {
+      save();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -727,8 +776,8 @@ public class LockableResourcesManager extends GlobalConfiguration {
    * resource).
    */
   public synchronized boolean steal(
-    List<LockableResource> resources,
-    String userName
+    @NonNull List<LockableResource> resources,
+    @NonNull String userName
   ) {
     for (LockableResource r : resources) {
       r.setReservedBy(userName);
@@ -744,17 +793,32 @@ public class LockableResourcesManager extends GlobalConfiguration {
    * the userName indefinitely (until that person, or some explicit scripted action, decides to
    * release the resource).
    */
-  public synchronized void reassign(
-    List<LockableResource> resources,
-    String userName
+  public synchronized boolean reassign(
+    @NonNull List<LockableResource> resources,
+    @NonNull String userName
   ) {
+    boolean somethingChanged = false;
     for (LockableResource r : resources) {
+      if (r.isReservedBy(userName)) {
+        // todo add message here, that you has reserved the resource currently
+        ActionLogs.add(
+          Level.WARNING,
+          "The user [" + userName + "] has currently reserved the resource [" + r.getName() + "].");
+        continue;
+      }
       if (r.isReserved() || r.isLocked() || r.isQueued()) {
         r.unReserve();
       }
       r.setReservedBy(userName);
+      somethingChanged = true;
     }
-    save();
+
+    if (somethingChanged) {
+      save();
+      return true;
+    }
+
+    return false;
   }
 
   private void unreserveResources(@NonNull List<LockableResource> resources) {
@@ -766,10 +830,10 @@ public class LockableResourcesManager extends GlobalConfiguration {
   }
 
   @SuppressFBWarnings(value = "REC_CATCH_EXCEPTION", justification = "not sure which exceptions might be catch.")
-  public synchronized void unreserve(List<LockableResource> resources) {
+  public synchronized boolean unreserve(@NonNull List<LockableResource> resources) {
     // make sure there is a list of resources to unreserve
     if (resources == null || resources.isEmpty()) {
-      return;
+      return false;
     }
     List<String> resourceNamesToUnreserve = new ArrayList<>();
     for (LockableResource r : resources) {
@@ -789,7 +853,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
             + String.join(", ", resourceNamesToUnreserve)
             + " so unreserving and proceeding.");
       unreserveResources(resources);
-      return;
+      return true;
     }
 
     PrintStream nextContextLogger = null;
@@ -817,6 +881,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
     boolean needToWait = false;
     for (LockableResource requiredResource : requiredResourceForNextContext) {
       if (!resourceNamesToUnreserve.contains(requiredResource.getName())) {
+        // todo shall be also check for isQueued() ?
         if (requiredResource.isReserved() || requiredResource.isLocked()) {
           needToWait = true;
           break;
@@ -826,7 +891,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
 
     if (needToWait) {
       unreserveResources(resources);
-      return;
+      return true;
     } else {
       unreserveResources(resources);
       List<String> resourceNamesToLock = new ArrayList<>();
@@ -847,7 +912,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
               + "Level.FINE for debugging purposes.");
           LOGGER.log(
             Level.FINE, "Cannot get the Run object from the context to proceed with lock", e);
-          return;
+          return false;
         }
       }
 
@@ -860,6 +925,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
         false);
     }
     save();
+    return true;
   }
 
   @NonNull
@@ -1048,14 +1114,12 @@ public class LockableResourcesManager extends GlobalConfiguration {
               // and let the resource be instantly re-used by someone from an
               // already waiting queue. Otherwise those already waiting are not
               // notified until you lock/unlock that resource again.
-              if (logger != null) {
-                logger.println(
-                  "Candidate resource '"
-                    + candidateName
-                    + "' is reserved by '"
-                    + candidate.getReservedBy()
-                    + "', not treating as available.");
-              }
+              // String message = "No treating is available for candidate resource [" + candidate.getName() + "].\n" + candidate.getLockCauseFormattedForLogs();
+              // ActionLogs.add(
+              //   logger,
+              //   Level.SEVERE,
+              //   message,
+              //   candidate.getName());
               totalReserved += 1;
               continue;
             }
@@ -1122,8 +1186,11 @@ public class LockableResourcesManager extends GlobalConfiguration {
         // (maybe several) of required resources and their amounts.
         // As soon as we know we can not fulfill the overall requirement
         // (not enough of something from that list), we bail out quickly.
-        if (logger != null && !skipIfLocked) {
-          logger.println(
+        if (!skipIfLocked) {
+          ActionLogs.add(
+            logger,
+            (logger != null) ? Level.WARNING : Level.FINE,
+            /// @todo add build id here.
             "Found "
               + selected.size()
               + " available resource(s). Waiting for correct amount: "
