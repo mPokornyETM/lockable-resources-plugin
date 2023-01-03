@@ -18,6 +18,7 @@ import hudson.BulkChange;
 import hudson.Extension;
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import hudson.Util;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -147,7 +148,11 @@ public class LockableResourcesManager extends GlobalConfiguration {
   public Set<String> getAllLabels() {
     Set<String> labels = new HashSet<>();
     for (LockableResource r : this.resources) {
-      labels.addAll(r.getLabelsAsList());
+      List<String> toAdd = r.getLabelsAsList();
+      if (toAdd.isEmpty()) {
+        continue;
+      }
+      labels.addAll(toAdd);
     }
     return labels;
   }
@@ -699,6 +704,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
 
   /** Creates the resource if it does not exist. */
   public synchronized boolean createResource(String name) {
+    name = Util.fixEmptyAndTrim(name);
     if (name != null) {
       LockableResource existent = fromName(name);
       if (existent == null) {
@@ -716,6 +722,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
   }
 
   public synchronized boolean createResourceWithLabel(String name, String label) {
+    name = Util.fixEmptyAndTrim(name);
     if (name != null && label != null) {
       LockableResource existent = fromName(name);
       if (existent == null) {
@@ -931,7 +938,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
   @NonNull
   @Override
   public String getDisplayName() {
-    return "External Resources";
+    return Messages.LockableResourcesManager_displayName();
   }
 
   public synchronized void reset(List<LockableResource> resources) {

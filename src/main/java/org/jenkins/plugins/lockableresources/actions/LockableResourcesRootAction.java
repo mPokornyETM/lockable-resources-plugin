@@ -177,7 +177,7 @@ public class LockableResourcesRootAction implements RootAction {
       "Try to unlock resource [" + name + "] by user [" + getUserName() + "]");
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, "Resource [" + name + "] not found");
+      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
       return;
     }
 
@@ -200,7 +200,7 @@ public class LockableResourcesRootAction implements RootAction {
       "Try to reserve resource [" + name + "] by user [" + getUserName() + "]");
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, "Resource [" + name + "] not found");
+      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
       return;
     }
 
@@ -209,7 +209,7 @@ public class LockableResourcesRootAction implements RootAction {
     String userName = getUserName();
     if (userName != null) {
       if (!LockableResourcesManager.get().reserve(resources, userName)) {
-        sendRspError(rsp, 423, "Resource [" + name + "] can not be reserved at the moment!");
+        sendRspError(rsp, 423, Messages.error_resourceAlreadyLocked(name));
         return;
       }
     }
@@ -228,7 +228,7 @@ public class LockableResourcesRootAction implements RootAction {
       "Try to steal resource [" + name + "] by user [" + getUserName() + "]");
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, "Resource [" + name + "] not found");
+      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
       return;
     }
 
@@ -269,7 +269,7 @@ public class LockableResourcesRootAction implements RootAction {
       "Try to reassign resource [" + name + "] by user [" + getUserName() + "]");
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, "Resource [" + name + "] not found");
+      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
       return;
     }
 
@@ -296,7 +296,7 @@ public class LockableResourcesRootAction implements RootAction {
       "Try to un-reserve resource [" + name + "] by user [" + getUserName() + "]");
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, "Resource [" + name + "] not found");
+      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
       return;
     }
 
@@ -331,7 +331,7 @@ public class LockableResourcesRootAction implements RootAction {
       "Try to reset resource [" + name + "] by user [" + getUserName() + "]");
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, "Resource [" + name + "] not found");
+      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
       return;
     }
 
@@ -359,7 +359,7 @@ public class LockableResourcesRootAction implements RootAction {
 
     final LockableResource resource = getResource(name);
     if (resource == null) {
-      sendRspError(rsp, 404, "Resource [" + name + "] not found!");
+      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
       return;
     }
 
