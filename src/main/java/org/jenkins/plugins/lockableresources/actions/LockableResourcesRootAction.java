@@ -172,12 +172,10 @@ public class LockableResourcesRootAction implements RootAction {
 
     String name = req.getParameter("resource");
     
-    ActionLogs.add(
-      Level.INFO,
-      "Try to unlock resource [" + name + "] by user [" + getUserName() + "]");
+    ActionLogs.add(Level.INFO, Messages.log_tryUnlock(name, getUserName()));
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
+      sendRspError(rsp, 404, Messages.log_resourceDoesNotExist(name));
       return;
     }
 
@@ -185,7 +183,7 @@ public class LockableResourcesRootAction implements RootAction {
     resources.add(r);
     LockableResourcesManager.get().unlock(resources, null);
 
-    forwardToPreviousPage(req, rsp, "Resource [" + name + "] unlocked");
+    forwardToPreviousPage(req, rsp, Messages.log_unlocked(name));
   }
 
   @RequirePOST
@@ -197,10 +195,10 @@ public class LockableResourcesRootAction implements RootAction {
     String name = req.getParameter("resource");
     ActionLogs.add(
       Level.INFO,
-      "Try to reserve resource [" + name + "] by user [" + getUserName() + "]");
+      Messages.log_tryReserve(name, getUserName()));
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
+      sendRspError(rsp, 404, Messages.log_resourceDoesNotExist(name));
       return;
     }
 
@@ -209,11 +207,11 @@ public class LockableResourcesRootAction implements RootAction {
     String userName = getUserName();
     if (userName != null) {
       if (!LockableResourcesManager.get().reserve(resources, userName)) {
-        sendRspError(rsp, 423, Messages.error_resourceAlreadyLocked(name));
+        sendRspError(rsp, 423, Messages.log_resourceAlreadyLocked(name));
         return;
       }
     }
-    forwardToPreviousPage(req, rsp, "Resource [" + name + "] reserved");
+    forwardToPreviousPage(req, rsp, Messages.log_reserved(name));
   }
 
   @RequirePOST
@@ -223,12 +221,10 @@ public class LockableResourcesRootAction implements RootAction {
     Jenkins.get().checkPermission(STEAL);
 
     String name = req.getParameter("resource");
-    ActionLogs.add(
-      Level.INFO,
-      "Try to steal resource [" + name + "] by user [" + getUserName() + "]");
+    ActionLogs.add(Level.INFO, Messages.log_trySteal(name, getUserName()));
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
+      sendRspError(rsp, 404, Messages.log_resourceDoesNotExist(name));
       return;
     }
 
@@ -243,11 +239,11 @@ public class LockableResourcesRootAction implements RootAction {
     }
     
     if (!LockableResourcesManager.get().steal(resources, userName)) {
-      sendRspError(rsp, 423, "Resource [" + name + "] can not be stolen at the moment!");
+      sendRspError(rsp, 423, Messages.log_canNotSteal(name));
       return;
     }
 
-    forwardToPreviousPage(req, rsp, "Resource [" + name + "] stolen");
+    forwardToPreviousPage(req, rsp, Messages.log_stolen(name));
   }
 
   @RequirePOST
@@ -264,12 +260,10 @@ public class LockableResourcesRootAction implements RootAction {
     }
 
     String name = req.getParameter("resource");
-    ActionLogs.add(
-      Level.INFO,
-      "Try to reassign resource [" + name + "] by user [" + getUserName() + "]");
+    ActionLogs.add(Level.INFO, Messages.log_tryReassign(name, userName));
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
+      sendRspError(rsp, 404, Messages.log_resourceDoesNotExist(name));
       return;
     }
 
@@ -277,11 +271,11 @@ public class LockableResourcesRootAction implements RootAction {
     resources.add(r);
     
     if (!LockableResourcesManager.get().reassign(resources, userName)) {
-      sendRspError(rsp, 423, "Resource [" + name + "] can not be reassign at the moment!");
+      sendRspError(rsp, 423, Messages.log_canNotReassign(name));
       return;
     }
 
-    forwardToPreviousPage(req, rsp, "Resource [" + name + "] reassigned");
+    forwardToPreviousPage(req, rsp, Messages.log_reassigned(name));
   }
 
   @RequirePOST
@@ -291,12 +285,10 @@ public class LockableResourcesRootAction implements RootAction {
     Jenkins.get().checkPermission(RESERVE);
 
     String name = req.getParameter("resource");
-    ActionLogs.add(
-      Level.INFO,
-      "Try to un-reserve resource [" + name + "] by user [" + getUserName() + "]");
+    ActionLogs.add(Level.INFO, Messages.log_tryUnreserve(name, getUserName()));
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
+      sendRspError(rsp, 404, Messages.log_resourceDoesNotExist(name));
       return;
     }
 
@@ -311,11 +303,11 @@ public class LockableResourcesRootAction implements RootAction {
     resources.add(r);
     
     if (!LockableResourcesManager.get().unreserve(resources)) {
-      sendRspError(rsp, 423, "Resource [" + name + "] can not be un-reserve at the moment!");
+      sendRspError(rsp, 423, Messages.log_canNotUnreserve(name));
       return;
     }
 
-    forwardToPreviousPage(req, rsp, "Resource [" + name + "] un-reserved");
+    forwardToPreviousPage(req, rsp, Messages.log_unreserved(name));
   }
 
   @RequirePOST
@@ -326,12 +318,10 @@ public class LockableResourcesRootAction implements RootAction {
     // Should this also be permitted by "STEAL"?..
 
     String name = req.getParameter("resource");
-    ActionLogs.add(
-      Level.INFO,
-      "Try to reset resource [" + name + "] by user [" + getUserName() + "]");
+    ActionLogs.add(Level.INFO, Messages.log_tryReset(name, getUserName()));
     LockableResource r = LockableResourcesManager.get().fromName(name);
     if (r == null) {
-      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
+      sendRspError(rsp, 404, Messages.log_resourceDoesNotExist(name));
       return;
     }
 
@@ -340,7 +330,7 @@ public class LockableResourcesRootAction implements RootAction {
     
     LockableResourcesManager.get().reset(resources);
 
-    forwardToPreviousPage(req, rsp, "Resource [" + name + "] reset");
+    forwardToPreviousPage(req, rsp, Messages.log_reset(name));
   }
 
   @RequirePOST
@@ -353,13 +343,11 @@ public class LockableResourcesRootAction implements RootAction {
       name = req.getParameter("resourceName");
     }
 
-    ActionLogs.add(
-      Level.INFO,
-      "Try to save note on resource [" + name + "] by user [" + getUserName() + "]");
+    ActionLogs.add(Level.INFO, Messages.log_trySaveNote(name, getUserName()));
 
     final LockableResource resource = getResource(name);
     if (resource == null) {
-      sendRspError(rsp, 404, Messages.error_resourceDoesNotExist(name));
+      sendRspError(rsp, 404, Messages.log_resourceDoesNotExist(name));
       return;
     }
 
@@ -370,20 +358,20 @@ public class LockableResourcesRootAction implements RootAction {
     resource.setNote(resourceNote);
     LockableResourcesManager.get().save();
 
-    forwardToPreviousPage(req, rsp, "Resource [" + name + "] note set");
+    forwardToPreviousPage(req, rsp, Messages.log_noteSaved(name));
   }
 
   private void sendRspError(final StaplerResponse rsp, int sc, final String message) throws IOException, ServletException {
     ActionLogs.add(
       Level.WARNING,
-      "User [" + getUserName() + "] action fails.\n" + message);
+      Messages.log_userRequestFails(getUserName(), message));
     rsp.sendError(sc, message.replace('[', '\'').replace(']', '\''));
   }
 
   private void forwardToPreviousPage(final StaplerRequest req, final StaplerResponse rsp, final String message) throws IOException, ServletException {
     ActionLogs.add(
       Level.INFO,
-      message + " by user [" + getUserName() + "]");
+      message + Messages.log_byUser(getUserName()));
     rsp.forwardToPreviousPage(req);
   }
 }

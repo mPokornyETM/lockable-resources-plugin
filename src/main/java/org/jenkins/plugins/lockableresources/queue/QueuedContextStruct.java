@@ -8,9 +8,14 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 package org.jenkins.plugins.lockableresources.queue;
 
+import hudson.model.Run;
+
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 /*
  * This class is used to queue pipeline contexts
@@ -75,6 +80,16 @@ public class QueuedContextStruct implements Serializable {
    */
   public String getVariableName() {
     return this.variableName;
+  }
+
+  /** Returns Run (Build) when is known for the context, null otherwise.*/
+  @Restricted(NoExternalUse.class)
+  public Run<?, ?> getRunOrNull() {
+    try {
+      return this.context.get(Run.class);
+    } catch (IOException | InterruptedException e) {
+      return null;
+    }
   }
 
   private static final long serialVersionUID = 1L;

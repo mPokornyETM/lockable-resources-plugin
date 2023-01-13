@@ -49,8 +49,7 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
     ActionLogs.add(
       logger,
       Level.INFO,
-      "The build [" + buildId + "] trying to acquire lock on resource [" + step + "]",
-      step.resource);
+      Messages.log_tryLock(buildId, step));
 
     List<LockableResourcesStruct> resourceHolderList = new ArrayList<>();
 
@@ -70,11 +69,12 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
         new LockableResourcesStruct(resources, resource.label, resource.quantity));
     }
 
+    Run<?, ?> run = getContext().get(Run.class);
     // determine if there are enough resources available to proceed
     List<LockableResource> available =
       LockableResourcesManager.get()
-        .checkResourcesAvailability(resourceHolderList, logger, null, step.skipIfLocked);
-    Run<?, ?> run = getContext().get(Run.class);
+        .checkResourcesAvailability2(resourceHolderList, logger, null, step.skipIfLocked, run);
+    
     if (available == null
       || !LockableResourcesManager.get()
       .lock(
@@ -128,8 +128,7 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
         ActionLogs.add(
           context.get(TaskListener.class).getLogger(),
           Level.INFO,
-          "Lock acquired on resource [" + resourceDescription + "] by build [" + buildId + "]",
-          resourceNames.get(index));
+          Messages.log_acquired(resourceNames.get(index), buildId));
       }     
     } catch (Exception e) {
       context.onFailure(e);
@@ -198,8 +197,7 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
         ActionLogs.add(
           context.get(TaskListener.class).getLogger(),
           Level.INFO,
-          "Lock released on resource [" + resourceDescription + "] used by build [" + buildId + "]",
-          resourceNames.get(index));
+          Messages.log_released(resourceDescription, buildId));
       }
       LOGGER.finest("Lock released on resource [" + resourceDescription + "] used by build [" + buildId + "]");
     }

@@ -34,51 +34,8 @@ public class ActionLogs {
     add(null, prio, message);
   }
   public static void add(PrintStream logger, Level prio, String message) {
-    
-    Entry entry = new Entry(prio, message, "", "");
-
-    _add(logger, entry);
-  }
-
-  /*public static void add(PrintStream logger, Level prio, String message, LockableResource resource) {
-
-    String requester;
-    if (resource.isReserved()) {
-
-      User user = Jenkins.get().getUser(resource.getReservedBy());
-      if (user != null) {
-        requester = "User: " + resource.getReservedBy();
-      } else {
-        requester = resource.getReservedBy();
-      }
-    }
-    else if (resource.isLocked()) {
-      requester = "Build: " + resource.getBuildName();
-    }
-    else if (resource.isQueued()) {
-      requester = resource.getQueueItemProject();
-    }
-    else {
-      requester = "";
-    }
-    Entry entry = new Entry(prio, message, resource.getName(), requester);
-
-    _add(logger, entry);
-  }*/
-
-  public static void add(PrintStream logger, Level prio, String message, String resourceID) {
-    Entry entry = new Entry(prio, message, resourceID, "");
-    _add(logger, entry);
-  }
-
-  // todo read from config file
-  private static final int MAX_ENTRIES_COUNT = 1000;
-  private static void _add(PrintStream logger, Entry entry) {
-    entry.print();
-    /*entries.add(entry);
-    if (MAX_ENTRIES_COUNT < entries.size()) {
-      entries.remove(0);
-    }*/
+    Entry entry = new Entry(prio, message);
+    entry.print(logger);
   }
 
   private static final Logger LOGGER = Logger.getLogger("lockable-resource-action-history");
@@ -133,29 +90,26 @@ public class ActionLogs {
       }
     }
 
-    Entry(Level prio, String message, String resourceId, String requester) {
+    Entry(Level prio, String message) {
       this.prio = prio;
       this.message = message;
-      this.resourceId = resourceId;
-      this.requester = requester;
+      this.resourceId = "";
+      this.requester = "";
       this.timestamp = new Date();
 
       if (this.message != null) {
-        if (this.resourceId == null || this.resourceId.isEmpty()) {
-          this.resourceId = getTokenFromMessage("resource");
-          if (this.resourceId.isEmpty()) {
-            this.resourceId = getTokenFromMessage("resources");
-          }
+        this.resourceId = getTokenFromMessage("resource");
+        if (this.resourceId.isEmpty()) {
+          this.resourceId = getTokenFromMessage("resources");
         }
-        if (this.requester == null || this.requester.isEmpty()) {
-          String token = getTokenFromMessage("build");
+
+        String token = getTokenFromMessage("build");
+        if (!token.isEmpty()) {
+          this.requester = "B:" + token;
+        } else {
+          token = getTokenFromMessage("user");
           if (!token.isEmpty()) {
-            this.requester = "B:" + token;
-          } else {
-            token = getTokenFromMessage("user");
-            if (!token.isEmpty()) {
-              this.requester = "U:" + token;
-            }
+            this.requester = "U:" + token;
           }
         }
       }
@@ -203,8 +157,10 @@ public class ActionLogs {
       return this.timestamp;
     }
 
-    public void print() {
+    public void print(PrintStream logger) {
       LOGGER.log(prio, message);
+      if (logger != null)
+        logger.println(message);
     }
 
     private String getTokenFromMessage(final String tokenIdentifier) {

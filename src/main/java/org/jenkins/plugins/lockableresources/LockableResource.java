@@ -368,16 +368,19 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     final String timestamp = (reservedTimestamp == null ? "<unknown>" : format.format(this.reservedTimestamp));
 
     if (this.isReservedByUser()) {
-      return String.format("Resource [%s] is reserved by user [%s] at [%s]", this.name, this.reservedBy, timestamp);
+      return Messages.log_reason_reservedByCurrentUser(this.name, this.reservedBy, timestamp);
+    }
+    else if (this.isStolen()) {
+      return Messages.log_reason_stolen(this.name, this.reservedBy, timestamp);
     }
     else if (this.isReserved()) {
-      return String.format("Resource [%s] is reserved by [%s] at [%s]", this.name, this.reservedBy, timestamp);
+      return Messages.log_reason_reserved(this.name, this.reservedBy, timestamp);
     }
     else if (this.isLocked()) {
-      return String.format("Resource [%s] is locked by build [%s] at [%s]", this.name, this.buildExternalizableId, timestamp);
+      return Messages.log_reason_locked(this.name, this.buildExternalizableId, timestamp);
     }
     else if (this.isQueued()) {
-      return String.format("Resource [%s] is queued by [%s] at [%s]", this.name, this.queueItemProject, timestamp);
+      return Messages.log_reason_queued(this.name, this.queueItemProject, timestamp);
     }
     return "";
   }
