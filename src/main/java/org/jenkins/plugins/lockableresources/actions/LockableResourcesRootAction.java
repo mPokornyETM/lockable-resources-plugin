@@ -8,6 +8,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 package org.jenkins.plugins.lockableresources.actions;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.Extension;
 import hudson.model.Api;
 import hudson.model.RootAction;
@@ -17,6 +18,7 @@ import hudson.security.PermissionGroup;
 import hudson.security.PermissionScope;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.logging.Level;
 import java.util.List;
 import java.util.Set;
 import javax.servlet.ServletException;
@@ -32,8 +34,6 @@ import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.export.ExportedBean;
 import org.kohsuke.stapler.interceptor.RequirePOST;
-
-import java.util.logging.Level;
 
 @Extension
 @ExportedBean
@@ -82,6 +82,7 @@ public class LockableResourcesRootAction implements RootAction {
     return new Api(this);
   }
 
+  @CheckForNull
   public String getUserName() {
     return LockableResource.getUserName();
   }
@@ -114,9 +115,9 @@ public class LockableResourcesRootAction implements RootAction {
     return LockableResourcesManager.get().getFreeResourceAmount(label);
   }
 
-  /** 
+  /**
    * Get percentage (0-100) usage of resources assigned to given *label*
-   * 
+   *
    * Used by {@code actions/LockableResourcesRootAction/index.jelly}
    * @since 2.19
    * @param label Label to search.
@@ -149,7 +150,7 @@ public class LockableResourcesRootAction implements RootAction {
 
   /**
    * Get amount of resources assigned to given *label*
-   * 
+   *
    * Used by {@code actions/LockableResourcesRootAction/index.jelly}
    * @param label Label to search.
    * @return Amount of assigned resources.
