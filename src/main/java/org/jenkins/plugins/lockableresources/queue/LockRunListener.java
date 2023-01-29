@@ -26,11 +26,11 @@ import org.jenkins.plugins.lockableresources.LockableResource;
 import org.jenkins.plugins.lockableresources.LockableResourcesManager;
 import org.jenkins.plugins.lockableresources.actions.LockedResourcesBuildAction;
 import org.jenkins.plugins.lockableresources.actions.ResourceVariableNameAction;
+import org.jenkins.plugins.lockableresources.util.BuildLogger;
 
 @Extension
 public class LockRunListener extends RunListener<Run<?, ?>> {
 
-  static final String LOG_PREFIX = "[lockable-resources]";
   static final Logger LOGGER = Logger.getLogger(LockRunListener.class
     .getName());
 
@@ -61,7 +61,7 @@ public class LockRunListener extends RunListener<Run<?, ?>> {
             build.addAction(LockedResourcesBuildAction
               .fromResources(required));
             listener.getLogger().printf("%s acquired lock on %s%n",
-              LOG_PREFIX, required);
+              BuildLogger.LOG_PREFIX, required);
             LOGGER.fine(build.getFullDisplayName()
               + " acquired lock on " + required);
             if (resources.requiredVar != null) {
@@ -85,7 +85,7 @@ public class LockRunListener extends RunListener<Run<?, ?>> {
             }
           } else {
             listener.getLogger().printf("%s failed to lock %s%n",
-              LOG_PREFIX, required);
+              BuildLogger.LOG_PREFIX, required);
             LOGGER.fine(build.getFullDisplayName() + " failed to lock "
               + required);
           }
@@ -107,7 +107,7 @@ public class LockRunListener extends RunListener<Run<?, ?>> {
     if (!required.isEmpty()) {
       LockableResourcesManager.get().unlock(required, build);
       listener.getLogger().printf("%s released lock on %s%n",
-        LOG_PREFIX, required);
+        BuildLogger.LOG_PREFIX, required);
       LOGGER.fine(build.getFullDisplayName() + " released lock on "
         + required);
     }

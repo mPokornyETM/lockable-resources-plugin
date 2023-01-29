@@ -17,6 +17,7 @@ import hudson.model.Queue;
 import hudson.model.Run;
 import org.jenkins.plugins.lockableresources.RequiredResourcesProperty;
 
+
 public final class Utils {
   private Utils() {}
 
@@ -45,4 +46,6 @@ public final class Utils {
 
     return null;
   }
+
+  
 }

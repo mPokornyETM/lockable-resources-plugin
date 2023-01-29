@@ -14,6 +14,7 @@ import static java.text.DateFormat.SHORT;
 import com.infradna.tool.bridge_method_injector.WithBridgeMethods;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.Nullable;
 import groovy.lang.Binding;
 import hudson.Extension;
 import hudson.Util;
@@ -46,6 +47,8 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.export.ExportedBean;
+
+import org.jenkins.plugins.lockableresources.util.BuildLogger;
 
 @ExportedBean(defaultVisibility = 999)
 public class LockableResource extends AbstractDescribableImpl<LockableResource>
@@ -381,7 +384,18 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     if (isLocked()) {
       return String.format("[%s] is locked by %s at %s", name, buildExternalizableId, timestamp);
     }
+    if (isQueued()) {
+      return String.format("[%s] is queued by %s (%s) at %s", name, queueItemProject, queueItemId, timestamp);
+    }
     return null;
+  }
+
+  @Restricted(NoExternalUse.class)
+  public void printLockCause(@NonNull BuildLogger logger) {
+    String cause = this.getLockCause();
+    if (cause != null && logger != null) {
+      logger.info(cause);
+    }
   }
 
   @WithBridgeMethods(value = AbstractBuild.class, adapterMethod = "getAbstractBuild")

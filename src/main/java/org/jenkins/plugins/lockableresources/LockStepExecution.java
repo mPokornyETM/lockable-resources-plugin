@@ -25,6 +25,9 @@ import org.jenkinsci.plugins.workflow.steps.EnvironmentExpander;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.jenkinsci.plugins.workflow.support.actions.PauseAction;
 
+
+import org.jenkins.plugins.lockableresources.util.BuildLogger;
+
 public class LockStepExecution extends AbstractStepExecutionImpl implements Serializable {
 
   private static final long serialVersionUID = 1391734561272059623L;
@@ -42,9 +45,10 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
   public boolean start() throws Exception {
     step.validate();
 
+    BuildLogger buildLogger = new BuildLogger(LOGGER, getContext());
+    buildLogger.info("Trying to acquire lock on [" + step + "]");
+    
     getContext().get(FlowNode.class).addAction(new PauseAction("Lock"));
-    PrintStream logger = getContext().get(TaskListener.class).getLogger();
-    logger.println("Trying to acquire lock on [" + step + "]");
 
     List<LockableResourcesStruct> resourceHolderList = new ArrayList<>();
 
@@ -52,7 +56,7 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
       List<String> resources = new ArrayList<>();
       if (resource.resource != null) {
         if (LockableResourcesManager.get().createResource(resource.resource)) {
-          logger.println("Resource [" + resource + "] did not exist. Created.");
+          buildLogger.config("Resource [" + resource.resource + "] did not exist. Created.");
         }
         resources.add(resource.resource);
       }
@@ -64,43 +68,44 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
     try {
       resourceSelectStrategy = ResourceSelectStrategy.valueOf(step.resourceSelectStrategy.toUpperCase(Locale.ENGLISH));
     } catch (IllegalArgumentException e) {
-      logger.println("Error: invalid resourceSelectStrategy: " + step.resourceSelectStrategy);
+      buildLogger.severe("[" + step + "] Invalid resourceSelectStrategy: " + step.resourceSelectStrategy);
       return true;
     }
     // determine if there are enough resources available to proceed
     List<LockableResource> available =
       LockableResourcesManager.get()
-        .checkResourcesAvailability(resourceHolderList, logger, null, step.skipIfLocked, resourceSelectStrategy);
-    Run<?, ?> run = getContext().get(Run.class);
+        .checkResourcesAvailability(resourceHolderList, buildLogger, null, null, step.skipIfLocked, resourceSelectStrategy);
+    
+    boolean lockProceeded;
+    if (available == null) {
+      buildLogger.warning("Can not find available resources for [" + step + "]");
+      lockProceeded = false;
+    } else {
+      Run<?, ?> run = getContext().get(Run.class);
+      lockProceeded =  LockableResourcesManager.get()
+                                               .lock(
+                                                 available,
+                                                 run,
+                                                 getContext(),
+                                                 step.toString(),
+                                                 step.variable,
+                                                 step.inversePrecedence
+                                                 );
+    }
 
-    if (available == null
-      || !LockableResourcesManager.get()
-      .lock(
-        available,
-        run,
-        getContext(),
-        step.toString(),
-        step.variable,
-        step.inversePrecedence)) {
+    if (!lockProceeded) {
       // No available resources, or we failed to lock available resources
       // if the resource is known, we could output the active/blocking job/build
-      LockableResource resource = LockableResourcesManager.get().fromName(step.resource);
-      boolean buildNameKnown = resource != null && resource.getBuildName() != null;
       if (step.skipIfLocked) {
-        if (buildNameKnown) {
-          logger.println(
-            "[" + step + "] is locked by " + resource.getBuildName() + ", skipping execution...");
-        } else {
-          logger.println("[" + step + "] is locked, skipping execution...");
-        }
+        buildLogger.info("[" + step + "] skipping execution...");
+      } else {
+        buildLogger.info("[" + step + "] waiting...");
+      }
+
+      if (step.skipIfLocked) {
         getContext().onSuccess(null);
         return true;
       } else {
-        if (buildNameKnown) {
-          logger.println("[" + step + "] is locked by " + resource.getBuildName() + ", waiting...");
-        } else {
-          logger.println("[" + step + "] is locked, waiting...");
-        }
         LockableResourcesManager.get()
           .queueContext(getContext(), resourceHolderList, step.toString(), step.variable);
       }
@@ -118,19 +123,17 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
     boolean inversePrecedence) {
     Run<?, ?> r;
     FlowNode node;
+    BuildLogger buildLogger = new BuildLogger(LOGGER, context);
     try {
       r = context.get(Run.class);
       node = context.get(FlowNode.class);
-      context
-        .get(TaskListener.class)
-        .getLogger()
-        .println("Lock acquired on [" + resourceDescription + "]");
+      buildLogger.info("Lock acquired on [" + resourceDescription + "]");
     } catch (Exception e) {
+      buildLogger.warning(e.toString());
       context.onFailure(e);
       return;
     }
 
-    LOGGER.finest("Lock acquired on [" + resourceDescription + "] by " + r.getExternalizableId());
     try {
       PauseAction.endCurrentPause(node);
       BodyInvoker bodyInvoker =
@@ -184,24 +187,21 @@ public class LockStepExecution extends AbstractStepExecutionImpl implements Seri
 
     @Override
     protected void finished(StepContext context) throws Exception {
+      BuildLogger buildLogger = new BuildLogger(LOGGER, context);
+      buildLogger.finest("Unlock resources: " + this.resourceNames);
       LockableResourcesManager.get()
         .unlockNames(this.resourceNames, context.get(Run.class), this.inversePrecedence);
-      context
-        .get(TaskListener.class)
-        .getLogger()
-        .println("Lock released on resource [" + resourceDescription + "]");
-      LOGGER.finest("Lock released on [" + resourceDescription + "]");
+      buildLogger.info("Lock released on resource [" + resourceDescription + "] at " + context.get(Run.class).getExternalizableId());
     }
   }
 
   @Override
   public void stop(@NonNull Throwable cause) {
+    BuildLogger buildLogger = new BuildLogger(LOGGER, getContext());
     boolean cleaned = LockableResourcesManager.get().unqueueContext(getContext());
     if (!cleaned) {
-      LOGGER.log(
-        Level.WARNING,
-        "Cannot remove context from lockable resource waiting list. "
-          + "The context is not in the waiting list.");
+      buildLogger.warning("Cannot remove context from lockable resource waiting list. " +
+                          "The context is not in the waiting list.");
     }
     getContext().onFailure(cause);
   }
