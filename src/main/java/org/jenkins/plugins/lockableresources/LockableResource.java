@@ -526,6 +526,7 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
   public void unReserve() {
     setReservedBy(null);
     setReservedTimestamp(null);
+    setReason(null);
     this.stolen = false;
   }
 

@@ -342,6 +342,22 @@ public class LockableResourcesRootAction implements RootAction {
     }
   }
 
+  @RequirePOST
+  public void doSaveReason(final StaplerRequest req, final StaplerResponse rsp)
+      throws IOException, ServletException {
+    Jenkins.get().checkPermission(RESERVE);
+
+    List<LockableResource> resources = this.getResourcesFromRequest(req, rsp);
+    if (resources == null) {
+      return;
+    }
+
+    String resourceNote = req.getParameter("reason");
+    LockableResourcesManager.get().setReservedReason(resources, resourceNote);
+
+    rsp.forwardToPreviousPage(req);
+  }
+
   private List<LockableResource> getResourcesFromRequest(final StaplerRequest req, final StaplerResponse rsp) throws IOException, ServletException {
     // todo, when you try to improve the API to use multiple resources (a list instead of single one)
     // this will be the best place to change it. Probably it will be enough to add a code piece here

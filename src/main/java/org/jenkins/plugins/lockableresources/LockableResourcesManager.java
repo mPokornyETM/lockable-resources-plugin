@@ -787,6 +787,21 @@ public class LockableResourcesManager extends GlobalConfiguration {
     save();
     return true;
   }
+  
+  /** Set reservation reason.
+   */
+  public synchronized boolean setReservedReason(List<LockableResource> resources, String reason) {
+    for (LockableResource r : resources) {
+      if (!r.isReserved()) {
+        return false;
+      }
+    }
+    for (LockableResource r : resources) {
+      r.setReason(reason);
+    }
+    save();
+    return true;
+  }
 
   /**
    * Reserves a resource that may be or not be locked by some

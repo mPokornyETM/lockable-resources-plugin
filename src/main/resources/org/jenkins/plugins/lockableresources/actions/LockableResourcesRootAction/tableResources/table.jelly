@@ -38,7 +38,7 @@ THE SOFTWARE.
       id="lockable-resources"
       data-remember-search-text="true"
       isLoaded="true"
-      data-columns-definition="[null, null, null, null, null, null, null, null]"
+      data-columns-definition="[null, null, null, null, null, null, null]"
       data-table-configuration="{}"
     >
       <colgroup>
@@ -50,8 +50,6 @@ THE SOFTWARE.
         <col class="col-width-2 text-end" />
         <!-- timestamp -->
         <col class="col-width-1 text-end" />
-        <!-- reason -->
-        <col class="col-width-2 text-end" />
         <!-- labels -->
         <col class="col-width-5 text-end" />
         <!-- properties -->
@@ -64,7 +62,6 @@ THE SOFTWARE.
         <th>${%resources.table.column.resource}</th>
         <th>${%resources.table.column.status}</th>
         <th>${%resources.table.column.timestamp}</th>
-        <th>${%resources.table.column.reason}</th>
         <th>${%resources.table.column.labels}</th>
         <th>${%resources.table.column.properties}</th>
         <th>${%resources.table.column.action}</th>
@@ -153,40 +150,63 @@ THE SOFTWARE.
               </j:otherwise>
             </j:choose>
 
-            <td class="jenkins-!-${cssClass}-color">
-              <j:choose>
-            <!-- Reserved by user, config or API.
-                 It differs to lock() or `queue` that this must be unreserve by some action.
-                 This kind is dangeresous, because it might leads to long blockage.
-                 Therefore we use `danger`color here.
-            -->
-              <j:when test="${resource.reservedBy != null}">
-                ${%resource.status.reservedBy(resource.reservedBy)}
-              </j:when>
-            <!-- Locked by job. This will be unlock automatically (I hope)
-                 Therefore use `warning`only
-            -->
-              <j:when test="${resource.locked}">
-                ${%resource.status.locked(rootURL + '/' + resource.build.url, resource.build.fullDisplayName)}
-              </j:when>
-            <!-- Queued by matrix-job. This will be unlock automatically (I hope)
-                 Therefore use `warning`only
-            -->
-              <j:when test="${resource.queued}">
-                ${%resource.status.queuedBy(resource.queueItemProject, resource.queueItemId)}
-              </j:when>
-            <!-- Resource is (or it looks so) free
-            -->
-              <j:otherwise>
-                ${%resource.status.free}
-              </j:otherwise>
-            </j:choose>
+            <td>
+              <div class="jenkins-!-${cssClass}-color">
+                <j:choose>
+              <!-- Reserved by user, config or API.
+                   It differs to lock() or `queue` that this must be unreserve by some action.
+                   This kind is dangeresous, because it might leads to long blockage.
+                   Therefore we use `danger`color here.
+              -->
+                <j:when test="${resource.reservedBy != null}">
+                  <div class="row justify-content-end">
+                    <div class="col-auto">
+                      ${%resource.status.reservedBy(resource.reservedBy)}
+                    </div>
+                    <div class="col-auto jenkins-!-margin-right-2">
+                    <l:hasPermission permission="${it.RESERVE}">
+                      <a class="jenkins-table__link" id="reason-link" href="replaceNote" onclick="return replaceReason(this, '${resource.name}');">
+                        <l:icon class="symbol-edit-note icon-sm" />
+                        ${%btn.editReason}
+                      </a>
+                    </l:hasPermission>
+                    </div>
+                  </div>
+                </j:when>
+              <!-- Locked by job. This will be unlock automatically (I hope)
+                   Therefore use `warning`only
+              -->
+                <j:when test="${resource.locked}">
+                  ${%resource.status.locked(rootURL + '/' + resource.build.url, resource.build.fullDisplayName)}
+                </j:when>
+              <!-- Queued by matrix-job. This will be unlock automatically (I hope)
+                   Therefore use `warning`only
+              -->
+                <j:when test="${resource.queued}">
+                  ${%resource.status.queuedBy(resource.queueItemProject, resource.queueItemId)}
+                </j:when>
+              <!-- Resource is (or it looks so) free
+              -->
+                <j:otherwise>
+                  ${%resource.status.free}
+                </j:otherwise>
+              </j:choose>
+            </div>
 
             <!-- add timestamp when possible -->
               <j:if test="${resource.reservedTimestamp != null}">
                 <br />
                 ${%ago(h.getTimeSpanString(resource.reservedTimestamp))}
               </j:if>
+              <div class="row">
+                <div id="reason-${resource.name}">
+                  <j:if test="${resource.reason != null and !resource.reason.isEmpty()}">
+                  <div class="note-wrapper jenkins-!-padding-2 jenkins-!-margin-right-1 overflow-auto">
+                    <j:out value="${resource.reason !=null ? app.markupFormatter.translate(resource.reason) : ''}"/>
+                  </div>
+                  </j:if>
+                </div>
+              </div>            
             </td>
 
 
@@ -208,29 +228,6 @@ THE SOFTWARE.
                 <td></td>
               </j:otherwise>
             </j:choose>
-
-            <!-- **************************************************************
-                 Reserved / locked timestamp column
-            -->
-            <td>
-              <j:if test="${resource.reason != null and !resource.reason.isEmpty()}">
-                <div class="row">
-                  <div class="col">
-                    ${resource.reason}
-                  </div>
-                </div>
-              </j:if>
-            </td>
-            <!-- **************************************************************
-                 Reason column
-            -->
-            <j:if test="${resource.reason != null and !resource.reason.isEmpty()}">
-              <div class="row">
-                <div class="col">
-                  ${resource.reason}
-                </div>
-              </div>
-            </j:if>
 
             
             <!-- **************************************************************
