@@ -461,10 +461,11 @@ public class LockableResource extends AbstractDescribableImpl<LockableResource>
     this.build = lockedBy;
     if (lockedBy != null) {
       this.buildExternalizableId = lockedBy.getExternalizableId();
-      setReservedTimestamp(new Date());
+      this.setReservedTimestamp(new Date());
     } else {
       this.buildExternalizableId = null;
-      setReservedTimestamp(null);
+      this.setReservedTimestamp(null);
+      this.setReason(null);
     }
   }
 
